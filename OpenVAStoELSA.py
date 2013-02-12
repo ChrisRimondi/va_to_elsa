@@ -170,14 +170,14 @@ class OpenVasLogger:
 				# Host IP is order 1
 				fieldList.append(unicode(struct.unpack('>L', socket.inet_aton(item['host']))[0])) #inet of host
 				# Program Name is order 2
-				#fieldList.append(unicode(binascii.crc32('openvas') & 0xffffffff)) #crc32 of program name
+				#fieldList.append(unicode(binascii.crc32('OPENVAS') & 0xffffffff)) #crc32 of program name
 				fieldList.append('OPENVAS')
 				# Class ID is order 3
 				fieldList.append(self.elsa_class_num) #class ID
 				# Message is order 4
 				fieldList.append(unicode(item['full_text'].replace('\t',' ').replace('\r',' ').replace('\n',' '))) #message value
 				# IP is i0, right now same as host
-				fieldList.append(unicode(struct.unpack('>L', socket.inet_aton(item['host']))[0]))
+				fieldList.append(item['host'])
 				# Port is i1, None for Issues
 				fieldList.append('None')
 				# CVSS_base is i2
@@ -213,14 +213,14 @@ class OpenVasLogger:
 				# Host IP is order 1
 				fieldList.append(unicode(struct.unpack('>L', socket.inet_aton(item['host']))[0])) #inet of host
 				# Program Name is order 2
-				#fieldList.append(unicode(binascii.crc32('openvas') & 0xffffffff)) #crc32 of program name
+				#fieldList.append(unicode(binascii.crc32('OPENVAS') & 0xffffffff)) #crc32 of program name
 				fieldList.append('OPENVAS')
 				# Class ID is order 3
 				fieldList.append(self.elsa_class_num) #class ID
 				# Message is order 4
 				fieldList.append(unicode(item['full_text'].replace('\t',' ').replace('\r',' ').replace('\n',' '))) #message value
 				# IP is i0, right now same has host
-				fieldList.append(unicode(struct.unpack('>L', socket.inet_aton(item['host']))[0]))
+				fieldList.append(item['host'])
 				# Port is i1
 				fieldList.append(item['port'])
 				# CVSS_base is i2, None for ports
@@ -278,7 +278,7 @@ INSERT INTO fields_classes_map (class_id, field_id, field_order) VALUES ((SELECT
 INSERT INTO fields_classes_map (class_id, field_id, field_order) VALUES ((SELECT id FROM classes WHERE class="OPENVAS"), (SELECT id FROM fields WHERE field="oid"), 12);
 INSERT INTO fields_classes_map (class_id, field_id, field_order) VALUES ((SELECT id FROM classes WHERE class="OPENVAS"), (SELECT id FROM fields WHERE field="vuln_desc"), 13);
 INSERT INTO fields_classes_map (class_id, field_id, field_order) VALUES ((SELECT id FROM classes WHERE class="OPENVAS"), (SELECT id FROM fields WHERE field="service"), 14);
-INSERT INTO fields_classes_map (class_id, field_id, field_order) VALUES ((SELECT id FROM classes WHERE class="OPENVAS"), (SELECT id FROM fields WHERE field="service"), 15);
+INSERT INTO fields_classes_map (class_id, field_id, field_order) VALUES ((SELECT id FROM classes WHERE class="OPENVAS"), (SELECT id FROM fields WHERE field="risk_factor"), 15);
 INSERT INTO fields_classes_map (class_id, field_id, field_order) VALUES ((SELECT id FROM classes WHERE class="OPENVAS"), (SELECT id FROM fields WHERE field="cve"), 16);
 """ % class_num
 	f = open('openvas_db_setup.sql','w')
@@ -314,7 +314,17 @@ def main():
 		 sys.exit()
 	  elif o in ['-s', '--create-sql-file']:
 			make_sql_file = True
-
+	
+	if (len(sys.argv) < 2):
+		usage()
+		sys.exit()
+	
+	try:
+		with open(in_file) as f: pass
+	except IOError as e:
+		print "Input file does not exist. Exiting."
+		sys.exit()
+	
 	ov = OpenVasParser(in_file)
 	logger = OpenVasLogger(ov,elsa_class)
 	logger.ovElsaLogToDisk(out_file)
