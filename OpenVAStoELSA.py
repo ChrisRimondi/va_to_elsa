@@ -35,7 +35,7 @@
 #2      | program name	|
 #3      | class			|
 #4 		| msg			|
-# i0 	| ip 			| right now same as host
+# i0 	| open 			|
 # i1 	| port			|
 # i2 	| cvss_base		|
 # i3 	| open			|
@@ -176,8 +176,8 @@ class OpenVasLogger:
 				fieldList.append(self.elsa_class_num) #class ID
 				# Message is order 4
 				fieldList.append(unicode(item['full_text'].replace('\t',' ').replace('\r',' ').replace('\n',' '))) #message value
-				# IP is i0, right now same as host
-				fieldList.append(item['host'])
+				# IP is i0, open
+				fieldList.append('')
 				# Port is i1, None for Issues
 				fieldList.append('None')
 				# CVSS_base is i2
@@ -219,8 +219,8 @@ class OpenVasLogger:
 				fieldList.append(self.elsa_class_num) #class ID
 				# Message is order 4
 				fieldList.append(unicode(item['full_text'].replace('\t',' ').replace('\r',' ').replace('\n',' '))) #message value
-				# IP is i0, right now same has host
-				fieldList.append(item['host'])
+				# IP is i0, open
+				fieldList.append('')
 				# Port is i1
 				fieldList.append(item['port'])
 				# CVSS_base is i2, None for ports
