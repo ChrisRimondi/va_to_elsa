@@ -1,0 +1,25 @@
+<ruleset name="PROCESS">
+		<pattern>PROCESS</pattern>
+		<rule provider="securitygrit" class="10004" id="10004">
+			<pattern>PROCESS @ESTRING:i0:|@@ESTRING:i1:|@@ESTRING:i2:|@@ESTRING:i3:|@@ESTRING:i4:|@@ESTRING:s2:|@@ESTRING:s0:|@@ESTRING:s1:|@@ESTRING::|@@ESTRING:i5:|@@ESTRING:s3:|@@ESTRING:s4:|@</pattern>
+			<examples>
+				<example>
+					<test_message program="PROCESS">PROCESS 132|4|20130227031755|20130227031795|0|192.168.10.16|System|Microsoft Windows Server 2003 R2 Enterprise Edition C:\WINDOWS \Device\Harddisk0\Partition1|4|Win32_OperatingSystem|System Idle Process|</test_message>
+					<test_values>
+						<test_value name="i0">132</test_value>
+						<test_value name="i1">4</test_value>
+						<test_value name="i2">20130227031755</test_value>
+						<test_value name="i3">20130227031795</test_value>
+						<test_value name="i4">0</test_value>
+						<test_value name="i5">4</test_value>
+						<test_value name="s0">System</test_value>
+						<test_value name="s1">Microsoft Windows Server 2003 R2 Enterprise Edition C:\WINDOWS \Device\Harddisk0\Partition1</test_value>
+						<test_value name="s2">192.168.10.16</test_value>
+						<test_value name="s3">Win32_OperatingSystem</test_value>
+						<test_value name="s4">System Idle Process</test_value>
+						
+					</test_values>
+				</example>
+			</examples>
+		</rule>
+	</ruleset>
