@@ -308,86 +308,15 @@ class NessusSyslogger:
 		self.logger.setLevel(logging.INFO)
 		self.syslog = SysLogHandler(address=('192.168.1.116', 514))
 		self.formatter = logging.Formatter('VA: %(message)s')
-		self.syslog.setFormatter(formatter)
-		self.logger.addHandler(syslog)
+		self.syslog.setFormatter(self.formatter)
+		self.logger.addHandler(self.syslog)
 		
 	def toSyslog(self):
 		for item in self.np_parsed.issueList:
-			print item['full_text']
-			self.logger.info("vulnerability")
+			#print item['full_text']
+			self.logger.info(item['full_text'])
 		
-	def createElsaLogList(self):
-		"Creates a log in ELSA preferred format"
-		logList = []
-		#For reference comprehensive list of keys. Note:All issues do not contain all keys
-		#dict_keys(['protocol', 'cvss_base_score', 'ip', 'risk_factor', 'port', 'xref', 'severity', 'synopsis', 'plugin_output', 'pluginID', 'svc_name', 'description', 'see_also', 'bid', 'plugin_modification_date', 'cvss_vector', 'plugin_version', 'solution', 'pluginName', 'cve', 'pluginFamily', 'plugin_type'])
-		for item in self.np_parsed.issueList:
-			#print item['oid']
-			fieldList = []
-			# Timestamp is order 0
-			fieldList.append(int(time.time()))
-			# Host IP is order 1
-			fieldList.append(unicode(struct.unpack('>L', socket.inet_aton(item['ip']))[0])) #inet of host
-			# Program Name is order 2
-			#fieldList.append(unicode(binascii.crc32('NESSUS') & 0xffffffff)) #crc32 of program name
-			fieldList.append('NESSUS')
-			# Class ID is order 3
-			fieldList.append(self.elsa_class_num) #class ID
-			# Message is order 4
-			fieldList.append(unicode(item['full_text'].replace('\t',' ').replace('\r',' ').replace('\n',' '))) #message value
-			# i0 is exploit available 1 for true 0 for false
-			if 'exploit_available' in item:
-				fieldList.append(item['exploit_available'])
-			else:
-				fieldList.append(0)
-			# Port is i1, None for Issues
-			fieldList.append(item['port'])
-			# CVSS_base is x10 to compensate for integer field
-			if 'cvss_base_score' in item: 
-				fieldList.append(unicode(item['cvss_base_score']*10))
-			else:
-				fieldList.append('No CVSS Base Score')
-			if 'cvss_temporal_score' in item: 
-				fieldList.append(unicode(item['cvss_temporal_score']*10))
-			else:
-				fieldList.append('No CVSS Temporal Score')
-			if 'severity' in item:
-				fieldList.append(item['severity'])
-			else:
-				fieldList.append('No Severity')
-			fieldList.append('NO FIELD')
-			#fieldList.append('')
-			# Protocol is s0, 
-			fieldList.append(item['protocol'])
-			# NID is s1 pluginID
-			fieldList.append(unicode(item['pluginID']))
-			# Vulnerability description (i.e. synopsis) is s2
-			if 'synopsis' in item:
-				fieldList.append(unicode(item['synopsis']))
-			else:
-				fieldList.append('No Vulnerability Description')
-			# Service is s3
-			fieldList.append(item['svc_name'])
-			# Risk Factor is s4
-			if 'risk_factor' in item:
-				fieldList.append(unicode(item['risk_factor']))
-			else:
-				fieldList.append('No Risk Factor')
-			# CVE is s5
-			if 'cve' in item:
-				fieldList.append(unicode(item['cve']))
-			else:
-				fieldList.append('No CVE')
-			
-			log = unicode('');
-			#tab delimit fields
-			for field in fieldList:
-				log += unicode(field).replace('\t',' ').replace('\r',' ').replace('\n',' ') + '	'
-			logList.append(log + '\n')	
-				
-			
-		return logList
-				
+	
 		
 
 #-------------------------#
