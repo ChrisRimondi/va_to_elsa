@@ -74,6 +74,8 @@ import sys
 import getopt
 import xml.etree.ElementTree as xml
 import re
+import logging
+from logging.handlers import SysLogHandler
 
 class OpenVasParser:
 	"This clas will parse an OpenVAS XML file and create an object"
@@ -295,12 +297,24 @@ class NessusParser:
 		
 		return list_issue
 
-class NessusLogger:
-	"This clas will take in an object from NessusParser and log it to a flat file"
+class NessusSyslogger:
+	"This clas will take in an object from NessusParser and log it to syslog"
 	
 	def __init__(self, np, elsa_class_num=10003):
 		self.np_parsed = np
 		self.elsa_class_num = elsa_class_num
+		#init syslog capabilities
+		self.logger = logging.getLogger()
+		self.logger.setLevel(logging.INFO)
+		self.syslog = SysLogHandler(address=('192.168.1.116', 514))
+		self.formatter = logging.Formatter('VA: %(message)s')
+		self.syslog.setFormatter(formatter)
+		self.logger.addHandler(syslog)
+		
+	def toSyslog(self):
+		for item in self.np_parsed.issueList:
+			print item['full_text']
+			self.logger.info("vulnerability")
 		
 	def createElsaLogList(self):
 		"Creates a log in ELSA preferred format"
@@ -375,21 +389,15 @@ class NessusLogger:
 		return logList
 				
 		
-	def npElsaLogToDisk(self,filename,format='utf-8'):
-		"Opens filename and writes log to disk"
-		f = open(filename,'w')
-		for log in self.createElsaLogList():
-			f.write(log.encode(format))
-		f.close()
 
 #-------------------------#
 # Begin the main program. #
 #-------------------------#
-def create_sql_file(class_num):
+def create_sql_file():
 	sql_file = """
 use syslog;
 INSERT INTO classes (id, class) VALUES (10201, "VULNERABILITY");
-INSERT INTO classes (id, class) VALUES (10201, "ASSET_ATTRIBUTE");
+INSERT INTO classes (id, class) VALUES (10202, "ASSET_ATTRIBUTE");
 INSERT INTO fields (field, field_type, pattern_type) VALUES ("operating_system", "string", "QSTRING");
 INSERT INTO fields (field, field_type, pattern_type) VALUES ("cve", "string", "QSTRING");
 
@@ -413,17 +421,17 @@ INSERT INTO fields_classes_map (class_id, field_id, field_order) VALUES ((SELECT
 INSERT INTO fields_classes_map (class_id, field_id, field_order) VALUES ((SELECT id FROM classes WHERE class="VULNERABILITY"), (SELECT id FROM fields WHERE field="service"), 13);
 INSERT INTO fields_classes_map (class_id, field_id, field_order) VALUES ((SELECT id FROM classes WHERE class="VULNERABILITY"), (SELECT id FROM fields WHERE field="cve"), 14);
 
-""" % class_num
-	f = open('nessus_db_setup.sql','w')
+"""
+	f = open('va_db_setup.sql','w')
 	f.write(sql_file)
 	f.close()
 	
 def usage():
-		print "Usage: OpenVAStoELSA.py [-i input_file | --input_file=input_file] [-o output_file | --output_file=output_file] [-e class-num| --elsa-class-num=class-num] [-s | --create-sql-file] [-h | --help]"
+		print "Usage: VAtoELSA.py [-i input_file | --input_file=input_file] [-s | --create-sql-file] [-h | --help]"
 def main():
 
-	letters = 'i:o:e:sh' #input_file, output_file, elsa_class_num respectively
-	keywords = ['input-file=', 'output-file=', 'elsa-class-num=', 'create-sql-file', 'help' ]
+	letters = 'i:sh' #input_file, output_file, elsa_class_num respectively
+	keywords = ['input-file=', 'create-sql-file', 'help' ]
 	try:
 		opts, extraparams = getopt.getopt(sys.argv[1:], letters, keywords)
 	except getopt.GetoptError, err:
@@ -431,17 +439,11 @@ def main():
 		usage()
 		sys.exit()
 	in_file = 'report.nessus'
-	out_file = 'nessus.log'
-	elsa_class = 10003
 	make_sql_file = False
 	
 	for o,p in opts:
 	  if o in ['-i','--input-file']:
 		 in_file = p
-	  elif o in ['-o','--output-file']:
-		 out_file = p
-	  elif o in ['-e','--elsa-class-num']:
-		 elsa_class = p
 	  elif o in ['-h', '--help']:
 		 usage()
 		 sys.exit()
@@ -459,10 +461,10 @@ def main():
 		sys.exit()
 	
 	np = NessusParser(in_file)
-	logger = NessusLogger(np,elsa_class)
-	logger.npElsaLogToDisk(out_file)
+	syslogger = NessusSyslogger(np)
 	if make_sql_file == True:
-		create_sql_file(elsa_class)
+		create_sql_file()
+	syslogger.toSyslog()
 
 if __name__ == "__main__":
 	main()
