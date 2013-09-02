@@ -195,19 +195,18 @@ class OpenVasParser:
 class OpenVaslogger:
 	"This clas will take in an object from OpenVASParser and log it to syslog"
 	
-	def __init__(self, np):
+	def __init__(self, np, elsa_ip):
 		self.np_parsed = np
-		#init syslog capabilities
+		self.elsa_ip = elsa_ip
 		
 	def toSyslog(self):
 		for item in self.np_parsed.issueList:
-			if item['risk_factor'] == 'None':
-				syslog('openvas: ' + 'Attribute| ' + item['full_text'], host='192.168.1.116')
-			else:
-				syslog('openvas: ' + 'Vulnerability| ' + item['full_text'], host='192.168.1.116')
+			#print type(item['full_text'].encode('ascii','ignore'))
+			syslog('openvas: ' + item['full_text'].encode('ascii','ignore').replace('\t','').replace('\n','').replace('\r',''), host=self.elsa_ip)
+
 		for port in self.np_parsed.portList:
 			#print port['full_text']
-			syslog('openvas: ' + 'Attribute|' + port['full_text'], host='192.168.1.116')
+			syslog('openvas_nmap: ' + port['full_text'], host=self.elsa_ip)
 
 class NessusParser:
 	"This clas will parse an Nessus v2 XML file and create an object"
@@ -342,12 +341,13 @@ class NessusParser:
 class NessusSyslogger:
 	"This clas will take in an object from NessusParser and log it to syslog"
 	
-	def __init__(self, np):
+	def __init__(self, np, elsa_ip):
 		self.np_parsed = np
+		self.elsa_ip = elsa_ip
 		
 	def toSyslog(self):
 		for item in self.np_parsed.issueList:
-			syslog('nessus: ' + item['full_text'], host='192.168.1.116')
+			syslog('nessus: ' + item['full_text'], host=self.elsa_ip)
 		
 	
 		
@@ -384,14 +384,19 @@ INSERT INTO classes (id, class) VALUES (10202, "OPENVAS");
 INSERT INTO fields (field, field_type, pattern_type) VALUES ("oid", "string", "QSTRING");
 
 INSERT INTO fields_classes_map (class_id, field_id, field_order) VALUES ((SELECT id FROM classes WHERE class="OPENVAS"), (SELECT id FROM fields WHERE field="srcip"), 5);
-INSERT INTO fields_classes_map (class_id, field_id, field_order) VALUES ((SELECT id FROM classes WHERE class="OPENVAS"), (SELECT id FROM fields WHERE field="srcport"), 6);
-INSERT INTO fields_classes_map (class_id, field_id, field_order) VALUES ((SELECT id FROM classes WHERE class="OPENVAS"), (SELECT id FROM fields WHERE field="cvss_base"), 7);
-INSERT INTO fields_classes_map (class_id, field_id, field_order) VALUES ((SELECT id FROM classes WHERE class="OPENVAS"), (SELECT id FROM fields WHERE field="proto"), 11);
-INSERT INTO fields_classes_map (class_id, field_id, field_order) VALUES ((SELECT id FROM classes WHERE class="OPENVAS"), (SELECT id FROM fields WHERE field="oid"), 12);
-INSERT INTO fields_classes_map (class_id, field_id, field_order) VALUES ((SELECT id FROM classes WHERE class="OPENVAS"), (SELECT id FROM fields WHERE field="vuln_desc"), 13);
-INSERT INTO fields_classes_map (class_id, field_id, field_order) VALUES ((SELECT id FROM classes WHERE class="OPENVAS"), (SELECT id FROM fields WHERE field="service"), 14);
+INSERT INTO fields_classes_map (class_id, field_id, field_order) VALUES ((SELECT id FROM classes WHERE class="OPENVAS"), (SELECT id FROM fields WHERE field="oid"), 11);
+INSERT INTO fields_classes_map (class_id, field_id, field_order) VALUES ((SELECT id FROM classes WHERE class="OPENVAS"), (SELECT id FROM fields WHERE field="desc"), 12);
+INSERT INTO fields_classes_map (class_id, field_id, field_order) VALUES ((SELECT id FROM classes WHERE class="OPENVAS"), (SELECT id FROM fields WHERE field="rule"), 13);
+INSERT INTO fields_classes_map (class_id, field_id, field_order) VALUES ((SELECT id FROM classes WHERE class="OPENVAS"), (SELECT id FROM fields WHERE field="type"), 14);
 INSERT INTO fields_classes_map (class_id, field_id, field_order) VALUES ((SELECT id FROM classes WHERE class="OPENVAS"), (SELECT id FROM fields WHERE field="risk_factor"), 15);
 INSERT INTO fields_classes_map (class_id, field_id, field_order) VALUES ((SELECT id FROM classes WHERE class="OPENVAS"), (SELECT id FROM fields WHERE field="cve"), 16);
+
+INSERT INTO classes (id, class) VALUES (10203, "OPENVAS_NMAP");
+
+INSERT INTO fields_classes_map (class_id, field_id, field_order) VALUES ((SELECT id FROM classes WHERE class="OPENVAS_NMAP"), (SELECT id FROM fields WHERE field="srcip"), 5);
+INSERT INTO fields_classes_map (class_id, field_id, field_order) VALUES ((SELECT id FROM classes WHERE class="OPENVAS_NMAP"), (SELECT id FROM fields WHERE field="srcport"), 6);
+INSERT INTO fields_classes_map (class_id, field_id, field_order) VALUES ((SELECT id FROM classes WHERE class="OPENVAS_NMAP"), (SELECT id FROM fields WHERE field="proto"), 7);
+INSERT INTO fields_classes_map (class_id, field_id, field_order) VALUES ((SELECT id FROM classes WHERE class="OPENVAS_NMAP"), (SELECT id FROM fields WHERE field="service"), 11);
 """ 
 
 	f = open('va_db_setup.sql','w')
@@ -400,41 +405,38 @@ INSERT INTO fields_classes_map (class_id, field_id, field_order) VALUES ((SELECT
 
 def create_xml_file():
 	xml_file = """
-<ruleset>
-	<pattern>nessus</pattern>
-    	<rules>
-        	<rule class="10201" id="10201">
+        <ruleset>
+                <pattern>nessus</pattern>
+                <pattern>Nessus</pattern>
+                <rules>
+                <rule class="10201" id="10201">
                   <patterns>
-                       <pattern>@ESTRING::: @@ESTRING:i3: | @@ESTRING::: @@ESTRING:i1: | @@ESTRING::: @@ESTRING:s3: | @@ESTRING::: @@ESTRING:i5: | @@ESTRING::: @@ESTRING:i4: | @@ESTRING:::
-: @@ESTRING:s1: | @@ESTRING::: @@ESTRING:s0: | @@ESTRING::: @@ESTRING:: | @@ESTRING::: @@ESTRING:i0: | @@ESTRING::: @@ESTRING:: | @@ESTRING::: @@ESTRING:: | @@ESTRING::: @@ESTRING:s4: | @@EE
-STRING::: @@ANYSTRING:s2:@</pattern>
-                 </patterns>
-                 <examples>
-                	<example>
-                    	<test_message program="nessus">IP: 192.168.1.115 | Port: 445 | SVC: cifs | Protocol: tcp | Severity: 0 | NID: 10394 | Plugin Name: Microsoff
-t Windows SMB Log In Possible | Plugin Family: Windows | Public Exploit Available: true | Plugin Modification Date: 2013/04/23 | Plugin Type: remote | Risk Factor: None | See also: http://
-/support.microsoft.com/kb/143474</test_message>
-                                                <!-- eventid -->
-                                                <test_value name="s0">QMOWsHjZqde</test_value>
-                                                <!-- srcip -->
-                                                <test_value name="i0">192.168.1.1</test_value>
-                                                <!-- srcport -->
-                                                <test_value name="i1">514</test_value>
-                                                <!-- dstip -->
-                                                <test_value name="i2">192.168.1.116</test_value>
-                                                <!-- dstport -->
-                                                <test_value name="i3">514</test_value>
-                                                <!-- proto -->
-                                                <test_value name="i4">UDP</test_value>
-                                                <!-- bro_facility -->
-                                                <test_value name="s1">LOCAL0</test_value>
-                                                <!-- bro_severity -->
-                                                <test_value name="s2">INFO</test_value>
-                                                <!-- bro_message -->
-                                                <test_value name="s3">Aug  3 23:13:39 pf: 00:00:00.804184 rule 36/0(match): pass in on vr0: (tos 0x0, ttl 64, id 11232, offset 0, flags [DFF
-], proto UDP (17), length 55)   192.168.1.116.43172 > 192.168.1.1.53: 40972+ A? localhost. (27)</test_value>
-                                        </example>
-                                </examples>
+                        <pattern>IP: @ESTRING:i3: | Port: @@ESTRING:i1: | SVC: @@ESTRING:s3: | Protocol: @@ESTRING:i5: | Severity: @@ESTRING:i4: | NID: @@ESTRING:s1: | Plugin Name: @@ESTRING:s0: |@@ESTRING::CVSS Base Score: @@ESTRING:s5: | @@ESTRING::Risk Factor: @@ESTRING:s4: | Synopsis: @@ESTRING:s2:@</pattern>
+                       <pattern>IP: @ESTRING:i3: | Port: @@ESTRING:i1: | SVC: @@ESTRING:s3: | Protocol: @@ESTRING:i5: | Severity: @@ESTRING:i4: | NID: @@ESTRING:s1: | Plugin Name: @@ESTRING:s0: |@@ESTRING::Risk Factor: @@ESTRING:s4: |@@ESTRING:: Synopsis: @@ESTRING:s2:@</pattern>
+                                </patterns>
+                        </rule>
+                </rules>
+        </ruleset>
+<ruleset>
+	        <ruleset>
+                <pattern>openvas</pattern>
+                <pattern>Openvas</pattern>
+                <rules>
+                        <rule class="10202" id="10202">
+                                <patterns>
+                                        <pattern>Host: @ESTRING:i0: | OID: @@ESTRING:s0: | name: @@ESTRING:s2: | family: @@ESTRING:s3: | cvss_base: @@ESTRING:: | risk_factor: @@ESTRING:s4: | cve: @@ESTRING:s5: |@@ESTRING::Description: @@ANYSTRING:s1:@</pattern>
+                                </patterns>
+                        </rule>
+                </rules>
+        </ruleset>
+        <ruleset>
+                <pattern>openvas_nmap</pattern>
+                <pattern>Openvas_nmap</pattern>
+                <rules>
+                        <rule class="10203" id="10203">
+                                <patterns>
+                                        <pattern>@ESTRING:i0: | @@ESTRING:s0: | @@ESTRING:i1: | @@ESTRING:i2:@</pattern>
+                                </patterns>
                         </rule>
                 </rules>
         </ruleset>
@@ -444,11 +446,11 @@ t Windows SMB Log In Possible | Plugin Family: Windows | Public Exploit Availabl
 	f.write(xml_file)
 	f.close()	
 def usage():
-		print "Usage: VAtoELSA.py [-i input_file | --input_file=input_file]  [-r report_type | --report_type=type] [-s | --create-sql-file] [-h | --help]"
+		print "Usage: VAtoELSA.py [-i input_file | --input_file=input_file] [-e elsa_ip | --elsa_ip=elsa_ip_address] [-r report_type | --report_type=type] [-s | --create-sql-file] [-h | --help]"
 def main():
 
-	letters = 'i:r:sh' #input_file, report_type, create_sql
-	keywords = ['input-file=', 'report_type=', 'create-sql-file', 'help' ]
+	letters = 'e:i:r:s:h:' #input_file, elsa_ip_address, report_type, create_sql
+	keywords = ['input-file=', 'elsa-ip=','report_type=', 'create-sql-file', 'help' ]
 	try:
 		opts, extraparams = getopt.getopt(sys.argv[1:], letters, keywords)
 	except getopt.GetoptError, err:
@@ -456,23 +458,32 @@ def main():
 		usage()
 		sys.exit()
 	in_file = ''
-	report_type = 'nessus'
+	elsa_ip = ''
+	report_type = ''
 	make_sql_file = False
-	
+
+		
 	for o,p in opts:
 	  if o in ['-i','--input-file=']:
-		 in_file = p
+	  	print p
+		in_file = p
 	  elif o in ['r', '--report_type=']:
+	  	print p
 	  	report_type = p
+	  elif o in ['e', '--elsa_ip=']:
+	  	print p
+	  	elsa_ip= p
 	  elif o in ['-h', '--help']:
+	  	 print p
 		 usage()
 		 sys.exit()
 	  elif o in ['-s', '--create-sql-file']:
 		make_sql_file = True
 	  
 	
-	print report_type
-	print in_file
+	#print report_type
+	#print in_file
+	#print elsa_ip
 	
 	if (len(sys.argv) < 2):
 		usage()
@@ -492,16 +503,16 @@ def main():
 	
 	if report_type.lower() == 'nessus':
 		np = NessusParser(in_file)
-		syslogger = NessusSyslogger(np)
+		syslogger = NessusSyslogger(np,elsa_ip)
 	elif report_type.lower() == 'openvas':
 		np = OpenVasParser(in_file)
-		syslogger = OpenVaslogger(np)
+		syslogger = OpenVaslogger(np,elsa_ip)
 	elif report_type.lower() == 'nikto':
 		np = NiktoParser(in_file)
-		syslogger = Niktologger(np)
+		syslogger = Niktologger(np,elsa_ip)
 	elif report_type.lower() == 'nmap':
 		np = NmapParser(in_file)
-		syslogger == Nmaplogger(np)
+		syslogger = Nmaplogger(np,elsa_ip)
 	else:
 		print "Error: Invalid report type specified. Available options: nessus, openvas, nikto, nmap"
 		sys.exit()
