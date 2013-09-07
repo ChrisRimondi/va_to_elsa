@@ -101,6 +101,45 @@ def syslog(message, level=LEVEL['notice'], facility=FACILITY['daemon'],
 	data = '<%d>%s' % (level + facility*8, message)
 	sock.sendto(data.encode('utf-8'), (host, port))
 	sock.close()
+	
+	
+class NmapParser:
+	"This clas will parse an Nmap XML file and create an object"
+	
+	def __init__(self, input_file):
+		self.input_file = input_file
+		self.tree = self.__importXML()
+		self.root = self.tree.getroot()
+		self.itemList = self.createItemList()
+		
+	def displayInputFileName(self):
+		print self.input_file
+		
+	def __importXML(self):
+		#Parse XML directly from the file path
+		return xml.parse(self.input_file)
+		
+	def createItemList(self):
+		"Returns a list of dictionaries for each issue in the report"
+		for h in self.root.iter('host'):
+			for c in h:
+				if c.tag == 'address':
+					print c.attrib['addr']
+				elif c.tag == 'hostnames':
+					for names in c.getchildren():
+						print names.attrib['name']
+				elif c.tag == 'ports':
+					for port in c.getchildren():
+						if port.tag == 'port':
+							print port.attrib['portid']
+							print port.attrib['protocol']
+							for p in port.getchildren():
+								if p.tag == 'state':
+									print p.attrib['state']
+								elif p.tag == 'service':
+									print p.attrib['name']
+		
+	
 
 class OpenVasParser:
 	"This clas will parse an OpenVAS XML file and create an object"
@@ -459,7 +498,7 @@ def main():
 		sys.exit()
 	in_file = ''
 	elsa_ip = ''
-	report_type = ''
+	report_type = 'nmap'
 	make_sql_file = False
 
 		
@@ -512,12 +551,13 @@ def main():
 		syslogger = Niktologger(np,elsa_ip)
 	elif report_type.lower() == 'nmap':
 		np = NmapParser(in_file)
-		syslogger = Nmaplogger(np,elsa_ip)
+		np.createItemList()
+		#syslogger = Nmaplogger(np,elsa_ip)
 	else:
 		print "Error: Invalid report type specified. Available options: nessus, openvas, nikto, nmap"
 		sys.exit()
 	
-	syslogger.toSyslog()
+	#syslogger.toSyslog()
 
 if __name__ == "__main__":
 	main()
