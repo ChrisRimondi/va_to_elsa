@@ -110,7 +110,7 @@ class NmapParser:
 		self.input_file = input_file
 		self.tree = self.__importXML()
 		self.root = self.tree.getroot()
-		self.itemList = self.createItemList()
+		self.itemList = self.__createItemList()
 		
 	def displayInputFileName(self):
 		print self.input_file
@@ -119,27 +119,56 @@ class NmapParser:
 		#Parse XML directly from the file path
 		return xml.parse(self.input_file)
 		
-	def createItemList(self):
-		"Returns a list of dictionaries for each issue in the report"
+	def __createItemList(self):
+		list_items = []
+		"Returns a list of dictionaries (only for open ports) for each host in the report"
 		for h in self.root.iter('host'):
+			dict_item = {}
 			for c in h:
 				if c.tag == 'address':
-					print c.attrib['addr']
+					if c.attrib['addr']:
+						dict_item['ip'] = c.attrib['addr']
 				elif c.tag == 'hostnames':
 					for names in c.getchildren():
-						print names.attrib['name']
+						if names.attrib['name']:
+							dict_item['hostname'] = names.attrib['name']
 				elif c.tag == 'ports':
 					for port in c.getchildren():
+						dict_itemb = {}
 						if port.tag == 'port':
-							print port.attrib['portid']
-							print port.attrib['protocol']
+							dict_item['port'] = port.attrib['portid']							
+							dict_item['protocol'] = port.attrib['protocol']							
 							for p in port.getchildren():
 								if p.tag == 'state':
-									print p.attrib['state']
+									dict_item['state'] = p.attrib['state']
 								elif p.tag == 'service':
-									print p.attrib['name']
+									dict_item['service'] = p.attrib['name']									
+							if dict_item['state'] == 'open':
+								dict_itemb['full_text'] = 'IP: ' + dict_item['ip'] + ' | '
+								if dict_item.has_key('hostname'):
+									dict_itemb['full_text'] += 'Hostname: ' + dict_item['hostname'] + ' | '
+								else:
+									dict_itemb['full_text'] += 'Hostname: ' + 'Hostname not found' + ' | '
+								dict_itemb['full_text'] += 'Port: ' + port.attrib['portid'] + ' | '
+								dict_itemb['full_text'] += 'Protocol: ' + port.attrib['protocol'] + ' | '
+								dict_itemb['full_text'] += 'Service: ' + p.attrib['name'] + ' | '
+								list_items.append(dict_itemb)
+								#print dict_itemb['full_text']
+		return list_items	
 		
+class Nmaplogger:
+	"This clas will take in an object from NmapParser and log it to syslog"
 	
+	def __init__(self, np, elsa_ip):
+		self.np_parsed = np
+		self.elsa_ip = elsa_ip
+		
+	def toSyslog(self):
+		for item in self.np_parsed.itemList:
+			#print 'Added item...'
+			#print item['full_text']
+			syslog('nmap: ' + item['full_text'].encode('ascii','ignore').replace('\t','').replace('\n','').replace('\r',''), host=self.elsa_ip)
+
 
 class OpenVasParser:
 	"This clas will parse an OpenVAS XML file and create an object"
@@ -290,7 +319,7 @@ class NessusParser:
 							dict_item['mac-address'] = child.text
 							dict_item['full_text'] += " | MAC: " + child.text
 						if child.attrib['name'] == 'host-fqdn':
-							dict_item['operating-system'] = child.text
+							dict_item['fqdn'] = child.text
 							dict_item['full_text'] += " | FQDN: " + child.text
 					#print dict_item
 				elif tag.tag == 'ReportItem':
@@ -388,8 +417,69 @@ class NessusSyslogger:
 		for item in self.np_parsed.issueList:
 			syslog('nessus: ' + item['full_text'], host=self.elsa_ip)
 		
+class NiktoParser:
+	"This clas will parse an Nikto XML file and create an object"
 	
+	def __init__(self, input_file):
+		self.input_file = input_file
+		self.tree = self.__importXML()
+		self.root = self.tree.getroot()
+		self.itemList = self.__createItemList()
 		
+	def displayInputFileName(self):
+		print self.input_file
+		
+	def __importXML(self):
+		#Parse XML directly from the file path
+		return xml.parse(self.input_file)
+		
+	def __createItemList(self):
+		list_items = []
+		"Returns a list of dictionaries for each item in the report"
+		for item in self.root.iter('item'):
+			dict_item = {}
+			dict_item['osvdbid'] = item.attrib['osvdbid']
+			dict_item['full_text'] = 'OSVDBID: ' + item.attrib['osvdbid'] + ' | '
+			dict_item['method'] =  item.attrib['method']
+			dict_item['full_text'] += 'Method: ' + item.attrib['method'] + ' | '
+			for c in item:
+				if c.tag == 'description':
+					dict_item['description'] = c.text
+					dict_item['full_text'] += 'Description: ' + c.text + ' | '
+				elif c.tag == 'uri':
+					dict_item['uri'] = c.text
+					dict_item['full_text'] += 'URI: ' + c.text + ' | '
+				elif c.tag == 'namelink':
+					#regex = re.compile(":\/\/([\w]*):")
+					regex = re.compile("(https?)://([.0-9a-zA-Z-]+)(/?.*?)([^/]*)")
+					#print regex.search(c.text).groups()
+					dict_item['hostname'] = regex.search(c.text).groups()[1]
+					dict_item['full_text'] += 'Hostname: ' + dict_item['hostname'] + ' | '
+					dict_item['srcport'] = regex.search(c.text).groups()[3][1:]
+					dict_item['full_text'] += 'Source Port: ' + dict_item['srcport'] + ' | '
+					dict_item['site'] = regex.search(c.text).groups()[0] + '://' +  regex.search(c.text).groups()[1]
+					dict_item['full_text'] += 'Site: ' + dict_item['site'] + ' | '
+				elif c.tag == 'iplink':
+					regex = re.compile("((?:[0-9]{1,3}\.){3}[0-9]{1,3})")
+					dict_item['srcip'] = regex.search(c.text).groups()[0]
+					dict_item['full_text'] += 'Source IP: ' + dict_item['srcip']
+			list_items.append(dict_item)
+			#print dict_item['full_text']
+		return list_items	
+		
+class Niktologger:
+	"This clas will take in an object from NiktoParser and log it to syslog"
+	
+	def __init__(self, np, elsa_ip):
+		self.np_parsed = np
+		self.elsa_ip = elsa_ip
+		
+	def toSyslog(self):
+		for item in self.np_parsed.itemList:
+			#print 'Added item...'
+			#print item['full_text']
+			#print item['srcip']
+			syslog('nikto: ' + item['full_text'].encode('ascii','ignore').replace('\t','').replace('\n','').replace('\r',''), host=self.elsa_ip)		
 
 #-------------------------#
 # Begin the main program. #
@@ -400,7 +490,6 @@ use syslog;
 INSERT INTO classes (id, class) VALUES (10201, "NESSUS");
 INSERT INTO fields (field, field_type, pattern_type) VALUES ("exp_avail", "int", "NUMBER");
 INSERT INTO fields (field, field_type, pattern_type) VALUES ("cvss_base", "int", "NUMBER");
-INSERT INTO fields (field, field_type, pattern_type) VALUES ("cvss_temporal", "int", "NUMBER");
 INSERT INTO fields (field, field_type, pattern_type) VALUES ("nid", "string", "QSTRING");
 INSERT INTO fields (field, field_type, pattern_type) VALUES ("risk_factor", "string", "QSTRING");
 INSERT INTO fields (field, field_type, pattern_type) VALUES ("cve", "string", "QSTRING");
@@ -408,7 +497,6 @@ INSERT INTO fields (field, field_type, pattern_type) VALUES ("cve", "string", "Q
 
 INSERT INTO fields_classes_map (class_id, field_id, field_order) VALUES ((SELECT id FROM classes WHERE class="NESSUS"), (SELECT id FROM fields WHERE field="exp_avail"), 5);
 INSERT INTO fields_classes_map (class_id, field_id, field_order) VALUES ((SELECT id FROM classes WHERE class="NESSUS"), (SELECT id FROM fields WHERE field="srcport"), 6);
-INSERT INTO fields_classes_map (class_id, field_id, field_order) VALUES ((SELECT id FROM classes WHERE class="NESSUS"), (SELECT id FROM fields WHERE field="cvss_base"), 7);
 INSERT INTO fields_classes_map (class_id, field_id, field_order) VALUES ((SELECT id FROM classes WHERE class="NESSUS"), (SELECT id FROM fields WHERE field="srcip"), 8);
 INSERT INTO fields_classes_map (class_id, field_id, field_order) VALUES ((SELECT id FROM classes WHERE class="NESSUS"), (SELECT id FROM fields WHERE field="severity"), 9);
 INSERT INTO fields_classes_map (class_id, field_id, field_order) VALUES ((SELECT id FROM classes WHERE class="NESSUS"), (SELECT id FROM fields WHERE field="proto"), 10);
@@ -417,7 +505,7 @@ INSERT INTO fields_classes_map (class_id, field_id, field_order) VALUES ((SELECT
 INSERT INTO fields_classes_map (class_id, field_id, field_order) VALUES ((SELECT id FROM classes WHERE class="NESSUS"), (SELECT id FROM fields WHERE field="desc"), 13);
 INSERT INTO fields_classes_map (class_id, field_id, field_order) VALUES ((SELECT id FROM classes WHERE class="NESSUS"), (SELECT id FROM fields WHERE field="service"), 14);
 INSERT INTO fields_classes_map (class_id, field_id, field_order) VALUES ((SELECT id FROM classes WHERE class="NESSUS"), (SELECT id FROM fields WHERE field="risk_factor"), 15);
-INSERT INTO fields_classes_map (class_id, field_id, field_order) VALUES ((SELECT id FROM classes WHERE class="NESSUS"), (SELECT id FROM fields WHERE field="cve"), 16);
+INSERT INTO fields_classes_map (class_id, field_id, field_order) VALUES ((SELECT id FROM classes WHERE class="NESSUS"), (SELECT id FROM fields WHERE field="cvss_base"), 16);
 
 INSERT INTO classes (id, class) VALUES (10202, "OPENVAS");
 INSERT INTO fields (field, field_type, pattern_type) VALUES ("oid", "string", "QSTRING");
@@ -430,12 +518,29 @@ INSERT INTO fields_classes_map (class_id, field_id, field_order) VALUES ((SELECT
 INSERT INTO fields_classes_map (class_id, field_id, field_order) VALUES ((SELECT id FROM classes WHERE class="OPENVAS"), (SELECT id FROM fields WHERE field="risk_factor"), 15);
 INSERT INTO fields_classes_map (class_id, field_id, field_order) VALUES ((SELECT id FROM classes WHERE class="OPENVAS"), (SELECT id FROM fields WHERE field="cve"), 16);
 
-INSERT INTO classes (id, class) VALUES (10203, "OPENVAS_NMAP");
+INSERT INTO classes (id, class) VALUES (10203, "NMAP");
 
-INSERT INTO fields_classes_map (class_id, field_id, field_order) VALUES ((SELECT id FROM classes WHERE class="OPENVAS_NMAP"), (SELECT id FROM fields WHERE field="srcip"), 5);
-INSERT INTO fields_classes_map (class_id, field_id, field_order) VALUES ((SELECT id FROM classes WHERE class="OPENVAS_NMAP"), (SELECT id FROM fields WHERE field="srcport"), 6);
-INSERT INTO fields_classes_map (class_id, field_id, field_order) VALUES ((SELECT id FROM classes WHERE class="OPENVAS_NMAP"), (SELECT id FROM fields WHERE field="proto"), 7);
-INSERT INTO fields_classes_map (class_id, field_id, field_order) VALUES ((SELECT id FROM classes WHERE class="OPENVAS_NMAP"), (SELECT id FROM fields WHERE field="service"), 11);
+INSERT INTO fields_classes_map (class_id, field_id, field_order) VALUES ((SELECT id FROM classes WHERE class="NMAP"), (SELECT id FROM fields WHERE field="srcip"), 5);
+INSERT INTO fields_classes_map (class_id, field_id, field_order) VALUES ((SELECT id FROM classes WHERE class="NMAP"), (SELECT id FROM fields WHERE field="srcport"), 6);
+INSERT INTO fields_classes_map (class_id, field_id, field_order) VALUES ((SELECT id FROM classes WHERE class="NMAP"), (SELECT id FROM fields WHERE field="proto"), 7);
+INSERT INTO fields_classes_map (class_id, field_id, field_order) VALUES ((SELECT id FROM classes WHERE class="NMAP"), (SELECT id FROM fields WHERE field="service"), 11);
+INSERT INTO fields_classes_map (class_id, field_id, field_order) VALUES ((SELECT id FROM classes WHERE class="NMAP"), (SELECT id FROM fields WHERE field="hostname"), 12);
+
+INSERT INTO classes (id, class) VALUES (10204, "NIKTO");
+INSERT INTO fields (field, field_type, pattern_type) VALUES ("osvdbid", "int", "NUMBER");
+
+
+INSERT INTO fields_classes_map (class_id, field_id, field_order) VALUES ((SELECT id FROM classes WHERE class="NIKTO"), (SELECT id FROM fields WHERE field="srcip"), 5);
+INSERT INTO fields_classes_map (class_id, field_id, field_order) VALUES ((SELECT id FROM classes WHERE class="NIKTO"), (SELECT id FROM fields WHERE field="srcport"), 6);
+INSERT INTO fields_classes_map (class_id, field_id, field_order) VALUES ((SELECT id FROM classes WHERE class="NIKTO"), (SELECT id FROM fields WHERE field="osvdbid"), 7);
+INSERT INTO fields_classes_map (class_id, field_id, field_order) VALUES ((SELECT id FROM classes WHERE class="NIKTO"), (SELECT id FROM fields WHERE field="method"), 11);
+INSERT INTO fields_classes_map (class_id, field_id, field_order) VALUES ((SELECT id FROM classes WHERE class="NIKTO"), (SELECT id FROM fields WHERE field="hostname"), 12);
+INSERT INTO fields_classes_map (class_id, field_id, field_order) VALUES ((SELECT id FROM classes WHERE class="NIKTO"), (SELECT id FROM fields WHERE field="site"), 13);
+INSERT INTO fields_classes_map (class_id, field_id, field_order) VALUES ((SELECT id FROM classes WHERE class="NIKTO"), (SELECT id FROM fields WHERE field="uri"), 14);
+INSERT INTO fields_classes_map (class_id, field_id, field_order) VALUES ((SELECT id FROM classes WHERE class="NIKTO"), (SELECT id FROM fields WHERE field="desc"), 15);
+
+
+
 """ 
 
 	f = open('va_db_setup.sql','w')
@@ -450,6 +555,7 @@ def create_xml_file():
                 <rules>
                 <rule class="10201" id="10201">
                   <patterns>
+                  		<pattern>IP: @ESTRING:i3: | Port: @@ESTRING:i1: | SVC: @@ESTRING:s3: | Protocol: @@ESTRING:i5: | Severity: @@ESTRING:i4: | NID: @@ESTRING:s1: | Plugin Name: @@ESTRING:s0: |@@ESTRING::CVSS Base Score: @@ESTRING:s5: | @@ESTRING::Risk Factor: @@ESTRING:s4: | See also: @@ESTRING:: | Synopsis: @@ESTRING:s2:@</pattern>
                         <pattern>IP: @ESTRING:i3: | Port: @@ESTRING:i1: | SVC: @@ESTRING:s3: | Protocol: @@ESTRING:i5: | Severity: @@ESTRING:i4: | NID: @@ESTRING:s1: | Plugin Name: @@ESTRING:s0: |@@ESTRING::CVSS Base Score: @@ESTRING:s5: | @@ESTRING::Risk Factor: @@ESTRING:s4: | Synopsis: @@ESTRING:s2:@</pattern>
                        <pattern>IP: @ESTRING:i3: | Port: @@ESTRING:i1: | SVC: @@ESTRING:s3: | Protocol: @@ESTRING:i5: | Severity: @@ESTRING:i4: | NID: @@ESTRING:s1: | Plugin Name: @@ESTRING:s0: |@@ESTRING::Risk Factor: @@ESTRING:s4: |@@ESTRING:: Synopsis: @@ESTRING:s2:@</pattern>
                                 </patterns>
@@ -479,6 +585,26 @@ def create_xml_file():
                         </rule>
                 </rules>
         </ruleset>
+        <ruleset>
+                <pattern>nmap</pattern>
+                <rules>
+                        <rule class="10203" id="10203">
+                                <patterns>
+                                        <pattern>IP: @ESTRING:i0: | Hostname: @@ESTRING:s1: | Port: @@ESTRING:i1: | Protocol: @@ESTRING:i2: | Service: @@ESTRING:s0: |@</pattern>
+                                </patterns>
+                        </rule>
+                </rules>
+        </ruleset>
+         <ruleset>
+                <pattern>nikto</pattern>
+                <rules>
+                        <rule class="10204" id="10204">
+                                <patterns>
+                                        <pattern>OSVDBID: @ESTRING:i2: | Method: @@ESTRING:s0: | Description: @@ESTRING:s4: | URI: @@ESTRING:s3: | Hostname: @@ESTRING:s1: | Source Port: @@ESTRING:i1: | Site: @@ESTRING:s2: | Source IP: @@ESTRING:i0:@</pattern>
+                                </patterns>
+                        </rule>
+                </rules>
+        </ruleset>
 """ 
 
 	f = open('va_db_setup.xml','w')
@@ -497,8 +623,8 @@ def main():
 		usage()
 		sys.exit()
 	in_file = ''
-	elsa_ip = ''
-	report_type = 'nmap'
+	elsa_ip = '192.168.1.116'
+	report_type = 'nikto'
 	make_sql_file = False
 
 		
@@ -551,13 +677,12 @@ def main():
 		syslogger = Niktologger(np,elsa_ip)
 	elif report_type.lower() == 'nmap':
 		np = NmapParser(in_file)
-		np.createItemList()
-		#syslogger = Nmaplogger(np,elsa_ip)
+		syslogger = Nmaplogger(np,elsa_ip)
 	else:
 		print "Error: Invalid report type specified. Available options: nessus, openvas, nikto, nmap"
 		sys.exit()
 	
-	#syslogger.toSyslog()
+	syslogger.toSyslog()
 
 if __name__ == "__main__":
 	main()
