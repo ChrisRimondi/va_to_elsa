@@ -27,7 +27,43 @@
 # ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY 
 # OF SUCH DAMAGE.
 
-# ASSET_ATTRIBUTE
+# Nessus
+# ELSA    Field Order Information
+# Order | Field     	| DB Order
+# 0     | timestamp 	|
+#1      | host			|
+#2      | program name	|
+#3      | class			|
+#4 		| msg			| 
+# i0    | exp_avail		| 5
+# i1 	| srcport		| 6
+# i3 	| srcip			| 8
+# i4 	| severity		| 9
+# i5 	| proto			| 10
+# s0 	| rule			| 11
+# s1 	| nid			| 12
+# s2 	| desc			| 13
+# s3 	| service		| 14
+# s4 	| risk_factor	| 15
+# s5 	| cvss_base		| 16
+
+# OpenVAS
+# ELSA    Field Order Information
+# Order | Field     	| DB Order
+# 0     | timestamp 	|
+#1      | host			|
+#2      | program name	|
+#3      | class			|
+#4 		| msg			| 
+# i0    | srcip			| 5
+# s0 	| oid			| 11
+# s1 	| desc			| 12
+# s2 	| rule			| 13
+# s3 	| type			| 14
+# s4 	| risk_factor	| 15
+# s5 	| cve			| 16
+
+# Nmap (OpenVAS also runs Nmap so results from it are added here as well)
 # ELSA    Field Order Information
 # Order | Field     	| DB Order
 # 0     | timestamp 	|
@@ -38,14 +74,10 @@
 # i0    | srcip			| 5
 # i1 	| srcport		| 6
 # i2 	| proto			| 7
-# i3 	| macb			| 11
+# s0 	| service		| 11
 # s1 	| hostname		| 12
-# s2 	| operating_system		| 13
-# s3 	| service		| 14
-# s4 	| desc			| 15
-# s5 	| notes			| 16
 
-# VULNERABILITY
+# Nikto
 # ELSA    Field Order Information
 # Order | Field     	| DB Order
 # 0     | timestamp 	|
@@ -55,12 +87,13 @@
 #4 		| msg			| 
 # i0    | srcip			| 5
 # i1 	| srcport		| 6
-# i2 	| severity		| 7
-# i3 	| proto			| 8
-# s1 	| rule			| 12
-# s2 	| desc			| 13
-# s3 	| service		| 14
-# s4 	| cve			| 15
+# i2	| srcip			| 7
+# s0 	| metho			| 11
+# s1 	| hostname		| 12
+# s2 	| site			| 13
+# s3 	| uri			| 14
+# s4 	| desc			| 15
+
 
 
 import socket
@@ -76,7 +109,9 @@ import xml.etree.ElementTree as xml
 import re
 import socket
 
-
+#Below is simple syslog implementation written by Christian Stigen Larsen
+#Found here: http://csl.name/py-syslog-win32/
+# Will work on Windows
 FACILITY = {
 	'kern': 0, 'user': 1, 'mail': 2, 'daemon': 3,
 	'auth': 4, 'syslog': 5, 'lpr': 6, 'news': 7,
@@ -476,7 +511,7 @@ class Niktologger:
 		
 	def toSyslog(self):
 		for item in self.np_parsed.itemList:
-			#print 'Added item...'
+			#print 'Log sent'
 			#print item['full_text']
 			#print item['srcip']
 			syslog('nikto: ' + item['full_text'].encode('ascii','ignore').replace('\t','').replace('\n','').replace('\r',''), host=self.elsa_ip)		
@@ -611,11 +646,11 @@ def create_xml_file():
 	f.write(xml_file)
 	f.close()	
 def usage():
-		print "Usage: VAtoELSA.py [-i input_file | --input_file=input_file] [-e elsa_ip | --elsa_ip=elsa_ip_address] [-r report_type | --report_type=type] [-s | --create-sql-file] [-h | --help]"
+		print "Usage: VAtoELSA.py [-i input_file | input_file=input_file] [-e elsa_ip | elsa_ip=elsa_ip_address] [-r report_type | --report_type=type] [-s | --create-sql-file] [-x | --create-xml-file][-h | --help]"
 def main():
 
-	letters = 'e:i:r:s:h:' #input_file, elsa_ip_address, report_type, create_sql
-	keywords = ['input-file=', 'elsa-ip=','report_type=', 'create-sql-file', 'help' ]
+	letters = 'i:e:r:sxh' #input_file, elsa_ip_address, report_type, create_sql, create_xml, help
+	keywords = ['input-file=', 'elsa-ip=','report_type=', 'create-sql-file', 'create-xml-file', 'help' ]
 	try:
 		opts, extraparams = getopt.getopt(sys.argv[1:], letters, keywords)
 	except getopt.GetoptError, err:
@@ -623,34 +658,40 @@ def main():
 		usage()
 		sys.exit()
 	in_file = ''
-	elsa_ip = '192.168.1.116'
-	report_type = 'nikto'
-	make_sql_file = False
+	elsa_ip = ''
+	report_type = ''
 
 		
 	for o,p in opts:
 	  if o in ['-i','--input-file=']:
-	  	print p
+	  	#print p
 		in_file = p
-	  elif o in ['r', '--report_type=']:
-	  	print p
+	  elif o in ['-r', '--report_type=']:
 	  	report_type = p
-	  elif o in ['e', '--elsa_ip=']:
-	  	print p
-	  	elsa_ip= p
+	  elif o in ['-x', '--create-xml-file']:
+	  	create_xml_file()
+	  	print 'XML file created: va_db_setup.xml'
+	  	print 'Paste its contents into your merged.xml or patterndb.xml file'
+	  	sys.exit()
+	  elif o in ['-e', '--elsa_ip=']:
+	  	#print p
+	  	elsa_ip=p
 	  elif o in ['-h', '--help']:
-	  	 print p
+	  	 #print p
 		 usage()
 		 sys.exit()
 	  elif o in ['-s', '--create-sql-file']:
-		make_sql_file = True
+		create_sql_file()
+	  	print 'SQL file created: va_db_setup.sql'
+	  	print 'On your ELSA host run # mysql < va_db_setup.sql'
+		sys.exit()
 	  
 	
 	#print report_type
 	#print in_file
 	#print elsa_ip
 	
-	if (len(sys.argv) < 2):
+	if (len(sys.argv) < 1):
 		usage()
 		sys.exit()
 	
@@ -660,11 +701,6 @@ def main():
 		print "Input file does not exist. Exiting."
 		sys.exit()
 	
-	if make_sql_file == True:
-		create_sql_file()
-		print 'SQL file created as va_db_setup.sql \n'
-		print 'Usage: # mysql < va_db_setup.sql'
-		sys.exit()
 	
 	if report_type.lower() == 'nessus':
 		np = NessusParser(in_file)
